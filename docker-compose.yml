@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  backend:
+    build: .
+    container_name: dashboard_backend
+    ports:
+      - "8080"
+    volumes:
+      - ./dashboard.db:/app/dashboard.db
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:latest
+    container_name: dashboard_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

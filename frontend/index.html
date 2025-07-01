@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Join Distributed Brain</title>
+</head>
+<body>
+  <h1>Enroll This Machine</h1>
+  <p>Choose resources to share:</p>
+  <label>CPU Cores: <input type="range" min="1" max="16" id="cpuRange"></label>
+  <br>
+  <label>RAM (GB): <input type="range" min="1" max="64" id="ramRange"></label>
+  <br><br>
+  <button onclick="downloadAgent()">Enroll</button>
+
+  <script>
+    function detectOS() {
+      let userAgent = window.navigator.userAgent;
+      if (userAgent.includes("Windows")) return "windows";
+      if (userAgent.includes("Mac")) return "mac";
+      if (userAgent.includes("Linux")) return "linux";
+      return "unknown";
+    }
+
+    function downloadAgent() {
+      let os = detectOS();
+      let cpu = document.getElementById("cpuRange").value;
+      let ram = document.getElementById("ramRange").value;
+      window.location.href = `https://yourdomain.com/download/${os}_agent?cpu=${cpu}&ram=${ram}`;
+    }
+  </script>
+</body>
+</html>
+
+
+Startup Script per OS
+After download, you include a script that:
+
+Runs agent in background
+
+Adds it to startup
+
+Example for Linux (install.sh):
+
+bash
+Copy
+Edit
+#!/bin/bash
+chmod +x ./dist_agent
+sudo mv ./dist_agent /usr/local/bin/dist_agent
+echo "[Unit]
+Description=Distributed Agent
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/dist_agent
+Restart=always
+
+[Install]
+WantedBy=multi-user.target" | sudo tee /etc/systemd/system/distagent.service
+
+sudo systemctl daemon-reexec
+sudo systemctl enable distagent
+sudo systemctl start distagent
+You can do the same for:
+
+macOS: use LaunchAgents.
+
+Windows: use a .bat or .vbs to register a Task Scheduler job.
+
+4. 🧠 Central Brain (Quick MVP Server – Rust with Axum)
+rust
+Copy
+Edit
+use axum::{Router, extract::Json, routing::post};
+use serde::Deserialize;
+
+#[derive(Deserialize, Debug)]
+struct SystemInfo {
+    hostname: String,
+    cpu_cores: usize,
+    total_memory: u64,
+    os: String,
+}
+
+async fn register(Json(info): Json<SystemInfo>) -> &'static str {
+    println!("New node registered: {:?}", info);
+    "OK"
+}
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new().route("/register", post(register));
+    axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
+Implement a gRPC or WebSocket connection for live task distribution.
+
+Use WASI or sandboxed execution if you want to push work to the agent (later step).
+
+🧠 Phase 1: Polished Dashboard (Frontend + API)
+🖥 Features:
+Show connected agents (hostname, OS, CPU/RAM usage, last ping)
+
+Visualize resource pool (total CPU, memory, GPU availability)
+
+Show task queue (active, pending, completed)
+
+Control buttons (enqueue task, pause agent, kill task, update agent)
+
+📦 Backend API (Rust with Axum + SQLx + SQLite/Postgres)
+This will:
+
+Track agent registrations and heartbeats
+
+Store task metadata (status, agent, result)
+
+Serve REST API to the dashboard
+
+Tables:
+
+sql
+Copy
+Edit
+CREATE TABLE agents (
+  id UUID PRIMARY KEY,
+  hostname TEXT,
+  os TEXT,
+  cpu_cores INTEGER,
+  total_memory INTEGER,
+  last_seen TIMESTAMP,
+  status TEXT
+);
+
+CREATE TABLE tasks (
+  id UUID PRIMARY KEY,
+  command TEXT,
+  assigned_to UUID REFERENCES agents(id),
+  status TEXT, -- "pending", "running", "complete", "failed"
+  output TEXT,
+  created_at TIMESTAMP
+);
+📊 Frontend (React + Tailwind UI)
+Pages:
+
+Agent Overview
+
+Data table w/ filters
+
+Status icon (green = online, red = stale, gray = disabled)
+
+Task Queue
+
+Add Task modal
+
+Live status updates (polling/WebSocket)
+
+Resource Pool
+
+Graphs: CPU, RAM, Node count
+
+🔁 Phase 2: Agent Auto-Updating
+Approach:
+
+Central server exposes /version/latest
+
+Agent checks this on each heartbeat
+
+If current_version < latest, agent:
+
+Downloads new binary from /bin/latest
+
+Replaces itself (using a shell script wrapper)
+
+Restarts service
+
+Agent Pseudo-Rust:
+
+rust
+Copy
+Edit
+let latest = get_latest_version_from_server();
+if current_version < latest {
+    download_and_replace_binary();
+    restart_self();
+}
+You can use self-restart crates like exec for this or have a separate "watchdog" binary handle updates.
+
+📋 Phase 3: Task Queue & Work Distribution
+Queue API
+/task/submit – Add new task (e.g. shell command or script path)
+
+/task/pickup – Agents call this to get next job
+
+/task/report – Agents report status and output
+
+Agent Flow:
+[register] --> [heartbeat] --> [pickup task if idle] --> [execute] --> [report result]
+Task Execution (in agent):
+
+use std::process::Command;
+
+let output = Command::new("bash")
+    .arg("-c")
+    .arg(&task.command)
+    .output()?;
+report_result(output);
+Optionally:
+
+Add WASI sandboxing for safety
+
+Use Docker to run untrusted jobs
+
+DASHBOARD API SKELETON:
+fn main() {
+    println!("Compile-time constants calculated using inline_rust:");
+    println!("CONST_HASH: {}", CONST_HASH);
+    println!("CONST_FOR_LOOP: {}", CONST_FOR_LOOP);
+    
+    // Verify the FOR_LOOP calculation at runtime
+    let mut runtime_sum: i32 = 0;
+    for n in 0..30 {
+        runtime_sum += n;
+    }
+    println!("Runtime calculation: {}", runtime_sum);
+    println!("Values match: {}", runtime_sum == CONST_FOR_LOOP);
+}
+Add SQLite/Postgres persistence with SQLx?
+
+Add task pickup/report endpoints for agents?
+
+Move to a production server setup (with Docker, TLS, logging)?
+
+Add agent/task controls to the UI (e.g. submit task, kill agent)?
+
+Scaffold the task queue and result viewer in the React dashboard?
+
+Add TLS with self-signed or Let's Encrypt certs?
+
+Package this all into a zip or GitHub-ready repo?\
+
+To secure your API server with Let's Encrypt, you can use Caddy — it automatically handles certificate issuance and renewal.
+
+Would you like me to:
+
+Add a Caddyfile for automatic HTTPS with reverse proxy?
+
+Modify your docker-compose.yml to include the Caddy reverse proxy?
+
+Enable a fallback to self-signed certs for local use?
+
+# Navigate to your project directory if not already there
+cd /home/bun/projects/DistributedBrain
+
+# Initialize a new Git repository
+git init
+
+# Add all files to the staging area
+git add .
+
+# Create an initial commit
+git commit -m "Initial commit of Distributed Brain project"
+
+# If you want to push to GitHub or another remote repository:
+# 1. Create a repository on GitHub first
+# 2. Then run:
+git remote add origin https://github.com/yourusername/DistributedBrain.git
+git branch -M main
+git push -u origin main

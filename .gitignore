@@ -1,0 +1,10 @@
+
+/target
+/node_modules
+/dashboard.db
+.env
+*.log
+*.sqlite3
+dist/
+build/
+    

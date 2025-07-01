@@ -1,0 +1,5 @@
+https://yourdomain.com {
+  reverse_proxy backend:8080
+  encode gzip
+  tls you@example.com
+}
